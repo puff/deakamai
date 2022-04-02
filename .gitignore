@@ -1,0 +1,10 @@
+.yarn/*
+!.yarn/cache
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+samples/*_pretty.js
+samples/*_deob.js

@@ -1,0 +1,19 @@
+{
+  "name": "deakamai",
+  "author": "puff",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "nike": "node src/index.js samples/nike-3UTPQY.js"
+  },
+  "dependencies": {
+    "@babel/generator": "^7.13.16",
+    "@babel/parser": "^7.13.16",
+    "@babel/traverse": "^7.16.3",
+    "@babel/types": "^7.13.17",
+    "colors": "^1.4.0",
+    "js-beautify": "^1.13.13"
+  },
+  "packageManager": "yarn@3.2.0"
+}
