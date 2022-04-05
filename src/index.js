@@ -23,14 +23,17 @@ console.log('Loading files and parsing ast...'.magenta)
 const source = fs.readFileSync(filePath, 'utf8'),
   ast = parse(source)
 
-let globalVar, varInit1 /* this seems to mainly be used to help in calculating varInit2, but the values are also used throughout the script */
-  , varInit2 /* used mainly for switch case tests */, vars /* holds all constants we decode */;
+let globalVar, // global or window object
+  varInit1, // this seems to mainly be used to help in calculating varInit2, but the values are also used throughout the script
+  varInit2, // used mainly for switch case tests,
+  vars // holds all constants we decode;
 
 console.log('Finding constant initialization functions...'.cyan)
 traverse(ast, {
   VariableDeclarator(path) {
     if (types.isThisExpression(path.get('init'))) {
-      // this is the window / global variable
+      if (globalVar !== undefined && varInit1 !== undefined && varInit2 !== undefined) return
+
       globalVar = path.get('id.name').node
 
       // get the top level if statement
@@ -49,13 +52,10 @@ traverse(ast, {
       if (types.isCallExpression(nextSibling.get('expression')))
         varInit2 = nextSibling.get('expression.callee.name').node
 
-
       if (varInit1 === undefined || varInit2 === undefined) {
         console.log('Failed to find constant initialization functions :('.red)
         path.stop()
       }
-      else
-        path.skip()
     }
   },
   FunctionDeclaration(path) {
@@ -75,10 +75,39 @@ traverse(ast, {
     }
   },
 })
+
 let varKeys = Object.keys(vars)
-console.log(vars)
 console.log(`Constant Initialization Functions | 1: ${varInit1} 2: ${varInit2}`.green)
 console.log(`Total constants: ${varKeys.length}`.green)
+
+let mainFlowVariable, mainFlowFunction, initialState
+console.log('Finding main flow function and initial state...'.cyan)
+traverse(ast, {
+  VariableDeclarator(path) {
+    if (mainFlowVariable !== undefined && mainFlowFunction !== undefined) return
+    if (types.isFunctionExpression(path.get('init')) && path.get('init.params').length === 2) {
+      const body = path.get('init.body.body')
+      if (body.length === 2 && types.isVariableDeclaration(body[0]) && types.isDoWhileStatement(body[1])) {
+        mainFlowVariable = path.get('id.name').node
+        mainFlowFunction = path.get('init.id.name').node
+      }
+    }
+  },
+  ReturnStatement(path) {
+    if (types.isCallExpression(path.get('argument')) && types.isMemberExpression(path.get('argument.callee')) &&
+      types.isIdentifier(path.get('argument.callee.object')) && path.get('argument.callee.object.name').node === mainFlowVariable) {
+      let initialStateVariable = path.get('argument.arguments')[1].node.name
+      if (initialStateVariable === undefined || !varKeys.includes(initialStateVariable)) {
+        console.log('Failed to find initial state :('.red)
+        path.stop()
+      }
+      else
+        initialState = vars[initialStateVariable]
+    }
+  }
+})
+console.log(`Main Flow | Variable: ${mainFlowVariable} | Function: ${mainFlowFunction} | Initial State: ${initialState}`.green)
+
 
 // they never change, so this is fine
 console.log('Replacing known constant variables with their values...'.cyan)
