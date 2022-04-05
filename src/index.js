@@ -23,13 +23,78 @@ console.log('Loading files and parsing ast...'.magenta)
 const source = fs.readFileSync(filePath, 'utf8'),
   ast = parse(source)
 
-console.log('Finding variable initialization functions...'.cyan)
+let globalVar, varInit1 /* this seems to mainly be used to help in calculating varInit2, but the values are also used throughout the script */
+  , varInit2 /* used mainly for switch case tests */, vars /* holds all constants we decode */;
+
+console.log('Finding constant initialization functions...'.cyan)
 traverse(ast, {
   VariableDeclarator(path) {
     if (types.isThisExpression(path.get('init'))) {
-      console.log(path.get('id.name').node)
-      console.log(path.scope.block)
-      return undefined;
+      // this is the window / global variable
+      globalVar = path.get('id.name').node
+
+      // get the top level if statement
+      const parent = path.findParent(p => {
+        if (types.isIfStatement(p) && types.isVariableDeclaration(p.getPrevSibling()))
+          return p;
+      })
+
+      // first var initialization function
+      let nextSibling = parent.getNextSibling()
+      if (types.isCallExpression(nextSibling.get('expression')))
+        varInit1 = nextSibling.get('expression.callee.name').node
+
+      // second var initialization function
+      nextSibling = nextSibling.getNextSibling();
+      if (types.isCallExpression(nextSibling.get('expression')))
+        varInit2 = nextSibling.get('expression.callee.name').node
+
+
+      if (varInit1 === undefined || varInit2 === undefined) {
+        console.log('Failed to find constant initialization functions :('.red)
+        path.stop()
+      }
+      else
+        path.skip()
     }
+  },
+  FunctionDeclaration(path) {
+    // please don't hurt me
+    if (varInit1 === path.get('id.name').node) {
+      let src = generate(path.get('body').node, {minified: true}).code.replaceAll('=', ':')
+      vars = eval('(' + src + ')')
+    }
+    else if (varInit2 === path.get('id.name').node) {
+      let src = generate(path.get('body').node, {minified: true}).code.replaceAll('=', ':'),
+      varString = JSON.stringify(vars).replaceAll(/[{}"]/g, '').replaceAll(':', '=')
+      vars = {
+        ...vars,
+        ...eval(varString + ';(' + src + ')')
+      }
+      path.stop()
+    }
+  },
+})
+let varKeys = Object.keys(vars)
+console.log(vars)
+console.log(`Constant Initialization Functions | 1: ${varInit1} 2: ${varInit2}`.green)
+console.log(`Total constants: ${varKeys.length}`.green)
+
+// they never change, so this is fine
+console.log('Replacing known constant variables with their values...'.cyan)
+traverse(ast, {
+  Identifier(path) {
+    let name = path.get('name').node
+    if (varKeys.includes(name) && (types.isBinaryExpression(path.parentPath) || types.isSwitchCase(path.parentPath)))
+      path.replaceWith(types.numericLiteral(vars[name]))
   }
 })
+
+let code = generate(ast, {}, source).code
+//code = beautify(code, {indent_size: 2, space_in_empty_paren: true})
+
+console.log(`Finished routines! Total time taken: ${Date.now() - beginTime}ms`.brightYellow)
+
+console.log('Saving cleaned file...'.magenta)
+fs.writeFileSync(outputFilePath, code)
+console.log('Done! Happy reversing :)'.magenta)
