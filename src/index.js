@@ -24,15 +24,15 @@ const source = fs.readFileSync(filePath, 'utf8'),
   ast = parse(source)
 
 let globalVar, // global or window object
-  varInit1, // this seems to mainly be used to help in calculating varInit2, but the values are also used throughout the script
-  varInit2, // used mainly for switch case tests,
-  vars // holds all constants we decode;
+  stateVarInit1, // this seems to mainly be used to help in calculating stateVarInit2, but the values are also used throughout the script
+  stateVarInit2, // mostly state variables (if not only)
+  vars // holds all variables we decode
 
-console.log('Finding constant initialization functions...'.cyan)
+console.log('Finding state variable initialization functions...'.cyan)
 traverse(ast, {
   VariableDeclarator(path) {
     if (types.isThisExpression(path.get('init'))) {
-      if (globalVar !== undefined && varInit1 !== undefined && varInit2 !== undefined) return
+      if (globalVar !== undefined && stateVarInit1 !== undefined && stateVarInit2 !== undefined) return
 
       globalVar = path.get('id.name').node
 
@@ -45,14 +45,14 @@ traverse(ast, {
       // first var initialization function
       let nextSibling = parent.getNextSibling()
       if (types.isCallExpression(nextSibling.get('expression')))
-        varInit1 = nextSibling.get('expression.callee.name').node
+        stateVarInit1 = nextSibling.get('expression.callee.name').node
 
       // second var initialization function
       nextSibling = nextSibling.getNextSibling();
       if (types.isCallExpression(nextSibling.get('expression')))
-        varInit2 = nextSibling.get('expression.callee.name').node
+        stateVarInit2 = nextSibling.get('expression.callee.name').node
 
-      if (varInit1 === undefined || varInit2 === undefined) {
+      if (stateVarInit1 === undefined || stateVarInit2 === undefined) {
         console.log('Failed to find constant initialization functions :('.red)
         path.stop()
       }
@@ -60,11 +60,11 @@ traverse(ast, {
   },
   FunctionDeclaration(path) {
     // please don't hurt me
-    if (varInit1 === path.get('id.name').node) {
+    if (stateVarInit1 === path.get('id.name').node) {
       let src = generate(path.get('body').node, {minified: true}).code.replaceAll('=', ':')
       vars = eval('(' + src + ')')
     }
-    else if (varInit2 === path.get('id.name').node) {
+    else if (stateVarInit2 === path.get('id.name').node) {
       let src = generate(path.get('body').node, {minified: true}).code.replaceAll('=', ':'),
       varString = JSON.stringify(vars).replaceAll(/[{}"]/g, '').replaceAll(':', '=')
       vars = {
@@ -73,11 +73,11 @@ traverse(ast, {
       }
       path.stop()
     }
-  },
+  }
 })
 
 let varKeys = Object.keys(vars)
-console.log(`Constant Initialization Functions | 1: ${varInit1} 2: ${varInit2}`.green)
+console.log(`State Variable Initialization Functions | 1: ${stateVarInit1} 2: ${stateVarInit2}`.green)
 console.log(`Total constants: ${varKeys.length}`.green)
 
 let mainFlowVariable, mainFlowFunction, initialState
@@ -108,13 +108,12 @@ traverse(ast, {
 })
 console.log(`Main Flow | Variable: ${mainFlowVariable} | Function: ${mainFlowFunction} | Initial State: ${initialState}`.green)
 
-
 // they never change, so this is fine
-console.log('Replacing known constant variables with their values...'.cyan)
+console.log('Replacing known state variables with their values...'.cyan)
 traverse(ast, {
   Identifier(path) {
     let name = path.get('name').node
-    if (varKeys.includes(name) && (types.isBinaryExpression(path.parentPath) || types.isSwitchCase(path.parentPath)))
+    if (!(types.isAssignmentExpression(path.parentPath) && path.parentPath.get('left') === path) && !types.isVariableDeclarator(path.parentPath) && varKeys.includes(name))
       path.replaceWith(types.numericLiteral(vars[name]))
   }
 })
