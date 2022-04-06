@@ -76,11 +76,9 @@ traverse(ast, {
   }
 })
 
-let varKeys = Object.keys(vars)
 console.log(`State Variable Initialization Functions | 1: ${stateVarInit1} 2: ${stateVarInit2}`.green)
-console.log(`Total constants: ${varKeys.length}`.green)
 
-let mainFlowVariable, mainFlowFunction, initialState
+let mainFlowVariable, mainFlowFunction, initialStateVariable, varKeys = Object.keys(vars)
 console.log('Finding main flow function and initial state...'.cyan)
 traverse(ast, {
   VariableDeclarator(path) {
@@ -96,27 +94,54 @@ traverse(ast, {
   ReturnStatement(path) {
     if (types.isCallExpression(path.get('argument')) && types.isMemberExpression(path.get('argument.callee')) &&
       types.isIdentifier(path.get('argument.callee.object')) && path.get('argument.callee.object.name').node === mainFlowVariable) {
-      let initialStateVariable = path.get('argument.arguments')[1].node.name
+      initialStateVariable = path.get('argument.arguments.1.name').node
       if (initialStateVariable === undefined || !varKeys.includes(initialStateVariable)) {
         console.log('Failed to find initial state :('.red)
         path.stop()
       }
-      else
-        initialState = vars[initialStateVariable]
     }
   }
 })
-console.log(`Main Flow | Variable: ${mainFlowVariable} | Function: ${mainFlowFunction} | Initial State: ${initialState}`.green)
+console.log(`Main Flow | Variable: ${mainFlowVariable} | Function: ${mainFlowFunction} | Initial state variable: ${initialStateVariable}`.green)
+
+console.log('Finding variable initialization switch state...'.cyan)
+
+let varInitializeState
+
+traverse(ast, {
+  SwitchCase(path) {
+    if (types.isIdentifier(path.get('test')) && path.get('test.name').node === initialStateVariable) {
+      let body = path.get('consequent.0.body')
+      // this is because it's not always the very first statement in the switch case, but it is always the first call to the main flow function
+      for (let block of body) {
+        if (types.isExpressionStatement(block) && types.isCallExpression(block.get('expression')) &&
+          types.isIdentifier(block.get('expression.callee')) && block.get('expression.callee.name').node === mainFlowFunction) {
+          varInitializeState = block.get('expression.arguments.0.name').node
+          path.stop()
+          break
+        }
+      }
+    }
+  }
+})
+
+console.log(`Variable initialization switch state: ${varInitializeState}`.green)
+
+console.log('Finding and calculating initial variable...'.cyan)
+
+traverse(ast, {
+
+})
 
 // they never change, so this is fine
 console.log('Replacing known state variables with their values...'.cyan)
-traverse(ast, {
-  Identifier(path) {
-    let name = path.get('name').node
-    if (!(types.isAssignmentExpression(path.parentPath) && path.parentPath.get('left') === path) && !types.isVariableDeclarator(path.parentPath) && varKeys.includes(name))
-      path.replaceWith(types.numericLiteral(vars[name]))
-  }
-})
+// traverse(ast, {
+//   Identifier(path) {
+//     let name = path.get('name').node
+//     if (!(types.isAssignmentExpression(path.parentPath) && path.parentPath.get('left') === path) && !types.isVariableDeclarator(path.parentPath) && varKeys.includes(name))
+//       path.replaceWith(types.numericLiteral(vars[name]))
+//   }
+// })
 
 let code = generate(ast, {}, source).code
 //code = beautify(code, {indent_size: 2, space_in_empty_paren: true})
