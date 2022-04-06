@@ -23,12 +23,12 @@ console.log('Loading files and parsing ast...'.magenta)
 const source = fs.readFileSync(filePath, 'utf8'),
   ast = parse(source)
 
+console.log('Finding state variable initialization functions...'.cyan)
 let globalVar, // global or window object
   stateVarInit1, // this seems to mainly be used to help in calculating stateVarInit2, but the values are also used throughout the script
   stateVarInit2, // mostly state variables (if not only)
   vars // holds all variables we decode
 
-console.log('Finding state variable initialization functions...'.cyan)
 traverse(ast, {
   VariableDeclarator(path) {
     if (types.isThisExpression(path.get('init'))) {
@@ -75,11 +75,11 @@ traverse(ast, {
     }
   }
 })
-
 console.log(`State Variable Initialization Functions | 1: ${stateVarInit1} 2: ${stateVarInit2}`.green)
 
-let mainFlowVariable, mainFlowFunction, initialStateVariable, varKeys = Object.keys(vars)
 console.log('Finding main flow function and initial state...'.cyan)
+let mainFlowVariable, mainFlowFunction, initialStateVariable, varKeys = Object.keys(vars)
+
 traverse(ast, {
   VariableDeclarator(path) {
     if (mainFlowVariable !== undefined && mainFlowFunction !== undefined) return
@@ -105,7 +105,6 @@ traverse(ast, {
 console.log(`Main Flow | Variable: ${mainFlowVariable} | Function: ${mainFlowFunction} | Initial state variable: ${initialStateVariable}`.green)
 
 console.log('Finding variable initialization switch state...'.cyan)
-
 let varInitializeState
 
 traverse(ast, {
@@ -124,13 +123,17 @@ traverse(ast, {
     }
   }
 })
-
 console.log(`Variable initialization switch state: ${varInitializeState}`.green)
 
-console.log('Finding and calculating initial variable...'.cyan)
+console.log('Finding and calculating initial variables...'.cyan)
+let initialVariables = []
 
 traverse(ast, {
-
+  SwitchCase(path) {
+    if (types.isIdentifier(path.get('test')) && path.get('test.name').node === varInitializeState) {
+      
+    }
+  }
 })
 
 // they never change, so this is fine
