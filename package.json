@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "nike": "node src/index.js samples/nike-3UTPQY.js"
+    "nike": "node src/index.js samples/nike-3UTPQY.js",
+    "newnike": "node src/index.js samples/nike-JJmk5QmMB.js"
   },
   "dependencies": {
     "@babel/generator": "^7.13.16",

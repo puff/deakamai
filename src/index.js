@@ -54,17 +54,29 @@ traverse(ast, {
 
       if (stateVarInit1 === undefined || stateVarInit2 === undefined) {
         console.log('Failed to find constant initialization functions :('.red)
-        path.stop()
       }
     }
   },
   FunctionDeclaration(path) {
-    // please don't hurt me
+    // eval first initialization variables
     if (stateVarInit1 === path.get('id.name').node) {
       let src = generate(path.get('body').node, {minified: true}).code.replaceAll('=', ':')
       vars = eval('(' + src + ')')
+      path.stop()
     }
-    else if (stateVarInit2 === path.get('id.name').node) {
+  }
+})
+console.log(`State Variable Initialization Functions | 1: ${stateVarInit1} 2: ${stateVarInit2}`.green)
+
+// do this in a new traverse because stateVarInit1 is not always before stateVarInit2 function
+console.log('Evaluating state initialization variables...'.cyan)
+traverse(ast, {
+  FunctionDeclaration(path) {
+    if (stateVarInit2 === path.get('id.name').node) {
+      if (vars === undefined) {
+        console.log('Failed getting vars on stateVarInit2'.red)
+        return
+      }
       let src = generate(path.get('body').node, {minified: true}).code.replaceAll('=', ':'),
       varString = JSON.stringify(vars).replaceAll(/[{}"]/g, '').replaceAll(':', '=')
       vars = {
@@ -75,7 +87,6 @@ traverse(ast, {
     }
   }
 })
-console.log(`State Variable Initialization Functions | 1: ${stateVarInit1} 2: ${stateVarInit2}`.green)
 
 console.log('Finding main flow function and initial state...'.cyan)
 let mainFlowVariable, mainFlowFunction, initialStateVariable, varKeys = Object.keys(vars)
@@ -93,12 +104,14 @@ traverse(ast, {
   },
   ReturnStatement(path) {
     if (types.isCallExpression(path.get('argument')) && types.isMemberExpression(path.get('argument.callee')) &&
-      types.isIdentifier(path.get('argument.callee.object')) && path.get('argument.callee.object.name').node === mainFlowVariable) {
+        types.isIdentifier(path.get('argument.callee.object')) && path.get('argument.callee.object.name').node === mainFlowVariable &&
+        types.isIdentifier(path.get('argument.arguments.1'))) {
+
       initialStateVariable = path.get('argument.arguments.1.name').node
-      if (initialStateVariable === undefined || !varKeys.includes(initialStateVariable)) {
+      if (initialStateVariable === undefined || !varKeys.includes(initialStateVariable))
         console.log('Failed to find initial state :('.red)
-        path.stop()
-      }
+      
+      path.stop()
     }
   }
 })
