@@ -89,7 +89,7 @@ traverse(ast, {
 })
 
 console.log('Finding main flow function and initial state...'.cyan)
-let mainFlowVariable, mainFlowFunction, initialStateVariable, varKeys = Object.keys(vars)
+let mainFlowVariable, mainFlowFunction, varStateHolder, varArgsHolder, initialStateVariable, varKeys = Object.keys(vars)
 
 traverse(ast, {
   VariableDeclarator(path) {
@@ -99,6 +99,8 @@ traverse(ast, {
       if (body.length === 2 && types.isVariableDeclaration(body[0]) && types.isDoWhileStatement(body[1])) {
         mainFlowVariable = path.get('id.name').node
         mainFlowFunction = path.get('init.id.name').node
+        varStateHolder = path.get('init.params.0.name').node
+        varArgsHolder = path.get('init.params.1.name').node
       }
     }
   },
@@ -115,13 +117,14 @@ traverse(ast, {
     }
   }
 })
-console.log(`Main Flow | Variable: ${mainFlowVariable} | Function: ${mainFlowFunction} | Initial state variable: ${initialStateVariable}`.green)
+console.log(`Main Flow | Variable: ${mainFlowVariable} | Function: ${mainFlowFunction} | Initial state variable: ${initialStateVariable} | State Holder: ${varStateHolder} | Arguments Holder: ${varArgsHolder}`.green)
 
-console.log('Finding variable initialization switch state...'.cyan)
-let varInitializeState
+console.log('Finding variable initialization and end switch state...'.cyan)
+let varInitializeState, varEndState
 
 traverse(ast, {
   SwitchCase(path) {
+    if (varInitializeState !== undefined) return
     if (types.isIdentifier(path.get('test')) && path.get('test.name').node === initialStateVariable) {
       let body = path.get('consequent.0.body')
       // this is because it's not always the very first statement in the switch case, but it is always the first call to the main flow function
@@ -129,14 +132,27 @@ traverse(ast, {
         if (types.isExpressionStatement(block) && types.isCallExpression(block.get('expression')) &&
           types.isIdentifier(block.get('expression.callee')) && block.get('expression.callee.name').node === mainFlowFunction) {
           varInitializeState = block.get('expression.arguments.0.name').node
-          path.stop()
           break
         }
       }
+ 
+      path.stop()
     }
+  },
+  DoWhileStatement(path) {
+    if (varEndState !== undefined) return
+    let fParent = path.getFunctionParent()
+    if (fParent.get('id.name').node !== mainFlowFunction) return
+
+    // TODO: The order may change and break this
+    if (!types.isBinaryExpression(path.get('test')) || !types.isIdentifier(path.get('test.left')) ||
+        path.get('test.left.name').node !== varStateHolder || !types.isIdentifier(path.get('test.right'))) return
+
+    varEndState = path.get('test.right.name').node
   }
+
 })
-console.log(`Variable initialization switch state: ${varInitializeState}`.green)
+console.log(`Initial switch state variable: ${varInitializeState} | End state variable: ${varEndState}`.green)
 
 console.log('Finding and calculating initial variables...'.cyan)
 let initialVariables = []
